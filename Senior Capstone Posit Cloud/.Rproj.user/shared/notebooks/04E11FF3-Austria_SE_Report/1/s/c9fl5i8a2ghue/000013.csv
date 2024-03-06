@@ -1,4 +1,0 @@
-"0",""
-"0","# eliminate missing values in 'Region' col by sorting places with NA for 'Region' into one of the 11 regions"
-"0","countries_with_happy <- countries_with_happy %>%"
-"0","  mutate(Region = ifelse(Country_or_region %in% c('Bosnia and Herzegovina', 'Kosovo', 'Montenegro'), 'EASTERN EUROPE', ifelse(Country_or_region %in% c('Central African Republic', 'South Sudan'), 'SUB-SAHARAN AFRICA', ifelse(Country_or_region == 'Myanmar', 'ASIA (EX. NEAR EAST)', Region))))"

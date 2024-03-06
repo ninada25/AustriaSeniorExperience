@@ -1,4 +1,0 @@
-"0","P1 <- ggplot(data=data.frame(Happy_M4$residuals), aes(y=Happy_M4$residuals, x=Happy_M4$fitted.values)) + geom_point() + ggtitle(""Residual Plot"") + xlab(""Predicted Values"") + ylab(""Residuals"")"
-"0","P2 <- ggplot(data=data.frame(Happy_M4$residuals), aes(x=Happy_M4$residuals)) + geom_histogram() + ggtitle(""Histogram of Residuals"") + xlab(""Residual"")"
-"0","P3 <- ggplot(data=data.frame(Happy_M4$residuals), aes(sample = scale(Happy_M4$residuals))) + stat_qq() + stat_qq_line() + xlab(""Normal Quantiles"") + ylab(""Residual Quantiles"") + ggtitle(""QQ Plot"")"
-"0","grid.arrange(P1, P2, P3, ncol=3)"

@@ -1,6 +1,0 @@
-"0","P4 <- ggplot(data=data.frame(Happy_M4$residuals), aes(y=Happy_M4$residuals, x=Happy_M4$model$`log(GDP)`)) + geom_point() + ggtitle(""Residual by Predictor Plot"") + xlab(""log(GDP per capita)"") + ylab(""Residuals"")"
-"0","P5 <- ggplot(data=data.frame(Happy_M4$residuals), aes(y=Happy_M4$residuals, x=Happy_M4$model$Internet)) + geom_point() + ggtitle(""Residual by Predictor Plot"") + xlab(""% Pop With Access to Internet"") + ylab(""Residuals"")"
-"0","P6 <- ggplot(data=data.frame(Happy_M4$residuals), aes(y=Happy_M4$residuals, x=Happy_M4$model$Health)) + geom_point() + ggtitle(""Residual by Predictor Plot"") + xlab(""% Gov Exp Dir Towards Healthcare"") + ylab(""Residuals"")"
-"0","P7 <- ggplot(data=data.frame(Happy_M4$residuals), aes(y=Happy_M4$residuals, x=Happy_M4$model$Military)) + geom_point() + ggtitle(""Residual by Predictor Plot"") + xlab(""% Gov Exp Dir Towards Military"") + ylab(""Residuals"")"
-"0","P8 <- ggplot(data=data.frame(Happy_M4$residuals), aes(y=Happy_M4$residuals, x=Happy_M4$model$Unemployment)) + geom_point() + ggtitle(""Residual by Predictor Plot"") + xlab(""% Labor Force Unemployed"") + ylab(""Residuals"")"
-"0","grid.arrange(P4, P5, P6, P7, P8, ncol=3)"

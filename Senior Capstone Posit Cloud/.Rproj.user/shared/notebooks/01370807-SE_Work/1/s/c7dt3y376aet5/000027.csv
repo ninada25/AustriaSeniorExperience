@@ -1,7 +1,0 @@
-"0","# Scatterplot of happiness score VS military"
-"0","ggplot(data=countries_with_happy, aes(x=Military, y=Happiness_score)) + "
-"0","  geom_point() +"
-"0","  ggtitle(""% Gov Expenditures Directed Toward Military VS Happiness Score"") + "
-"0","  ylab(""Happiness Score (0-10)"") + "
-"0","  xlab(""% Gov Expenditures Directed Toward Military"") +"
-"0","  geom_smooth(method = ""lm"", se = FALSE)"

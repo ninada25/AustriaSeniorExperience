@@ -1,6 +1,0 @@
-"0","# Scatterplot of happiness score VS log(GDP) per capita with color = Internet"
-"0","ggplot(data=countries_with_happy, aes(x=log(GDP), y=Happiness_score, color = Internet)) + "
-"0","  geom_point() +"
-"0","  ggtitle(""log(GDP) VS Happiness Score"") + "
-"0","  ylab(""Happiness Score (0-10)"") + "
-"0","  xlab(""log(GDP per capita)"") "
