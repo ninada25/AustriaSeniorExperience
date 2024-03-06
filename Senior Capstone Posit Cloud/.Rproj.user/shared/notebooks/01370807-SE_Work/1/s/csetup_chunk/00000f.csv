@@ -1,0 +1,6 @@
+"0","knitr::opts_chunk$set(echo = TRUE, include = TRUE, warning = FALSE)"
+"2","Warning message:
+"
+"2","In fun(libname, pkgname) :"
+"2"," couldn't connect to display "":0""
+"

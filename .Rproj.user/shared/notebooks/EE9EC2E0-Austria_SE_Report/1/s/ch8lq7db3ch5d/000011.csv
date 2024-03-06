@@ -1,0 +1,8 @@
+"0","library(ggplot2)  # Load ggplot2 package"
+"0",""
+"0","# Create boxplot of happiness scores by region "
+"0","ggplot(countries_with_happy, aes(x = Region, y = Happiness_score)) + "
+"0","  geom_boxplot(fill = ""skyblue"", color = ""black"") + "
+"0","  labs(x = ""Region"","
+"0","       y = ""Happiness Score (1-10)"") +"
+"0","  coord_flip() # flip the axes "

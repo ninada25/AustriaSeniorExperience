@@ -1,0 +1,6 @@
+"0","# Scatterplot of happiness score VS GDP per capita"
+"0","ggplot(data=countries_with_happy, aes(x=GDP, y=Happiness_score)) + "
+"0","  geom_point() +"
+"0","# geom_text(aes(label = Country_or_region), hjust = 0.5, vjust = -0.5) + # in case I ever want to see the country each pt represents. Costa Rica has low GDP but high happiness!"
+"0","  ylab(""Happiness Score (0-10)"") + "
+"0","  xlab(""GDP per capita"") "

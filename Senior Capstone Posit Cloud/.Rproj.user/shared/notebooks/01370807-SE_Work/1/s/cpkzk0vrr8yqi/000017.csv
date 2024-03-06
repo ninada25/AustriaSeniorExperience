@@ -1,0 +1,6 @@
+"0","# Histogram of happiness scores "
+"0","ggplot(data=countries_with_happy, aes(x=Happiness_score)) + "
+"0","  geom_histogram(fill=""purple"", color=""white"") + "
+"0","  ggtitle(""Distribution of Happiness Scores"") +"
+"0","  xlab(""Happiness Score (0-10)"") + "
+"0","  ylab(""Frequency"")"

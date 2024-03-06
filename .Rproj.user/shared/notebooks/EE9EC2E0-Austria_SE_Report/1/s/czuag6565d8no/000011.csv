@@ -1,0 +1,5 @@
+"0","library(corrplot)"
+"0",""
+"0","# Correlation plot for numerical variables in the dataset:"
+"0","Corr <- cor(select_if(countries_with_happy, is.numeric), use = ""complete.obs"")"
+"0","corrplot(Corr, type = 'upper', tl.col = ""black"", tl.srt = 45) # lower rectangular, tl.srt = 45 rotates the text 45 deg"

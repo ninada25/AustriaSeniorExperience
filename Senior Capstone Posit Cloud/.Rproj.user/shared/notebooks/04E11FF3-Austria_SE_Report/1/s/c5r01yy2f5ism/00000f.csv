@@ -1,0 +1,3 @@
+"0","# Create table with estimates of fixed effects from model 2"
+"0","Happy_M2 <- lmer(Happiness_score ~ log(GDP) + Internet + Health + Military + Unemployment + (1 | Region), data = countries_with_happy)"
+"0","kable(summary(Happy_M2)$coefficients, digits = 3, caption=""Estimates of Fixed Effects in Model 2"")"
