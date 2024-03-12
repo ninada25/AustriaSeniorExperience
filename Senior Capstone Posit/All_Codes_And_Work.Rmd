@@ -1,0 +1,768 @@
+---
+title: "SE Work and Codes"
+output: html_document
+date: "2024-01-10"
+---
+
+In this RMarkdown, I have my SE work / codes from throughout the term.
+
+```{r setup, include = FALSE, warning = FALSE}
+knitr::opts_chunk$set(echo = TRUE, include = TRUE, warning = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(readr)
+library(knitr)
+library(ggplot2)
+library(dplyr)
+library(maps)
+library(Lock5Data)
+library(gridExtra)
+library(lme4)
+library(lmerTest)
+library(Matrix)
+library(lime) # import LIME package
+library(caret)
+library(yardstick) # for calculating RMSE
+```
+
+# Week 1 Work 
+
+```{r, echo=FALSE}
+#setwd("/cloud/project/data")
+happy <- read_csv("hapiscore2018.csv") # only want to look at happiness scores for 2018 since the other dataset I will work with contains data from 2018
+
+data("AllCountries")
+
+### DATA CLEANING - World Happiness Report 2018 ### 
+
+summary(happy)
+happy[sapply(happy, is.character)] <- lapply(happy[sapply(happy, is.character)], as.factor) # convert all character variables to factor
+happy$`Perceptions of corruption` <- as.numeric(as.character(happy$`Perceptions of corruption`)) # convert perceptions of corruption to numeric
+glimpse(happy)
+colnames(happy) <- gsub(" ", "_", colnames(happy)) # replace all spaces in column names with underscores
+n_distinct(happy$Country_or_region) # 156 different countries or regions
+
+### DATA CLEANING - AllCountries (data for each variable were collected for 2018 (or most recently available year) ###
+
+summary(AllCountries)
+n_distinct(AllCountries$Country) # 217 different countries in this dataset, I will only look at the places that also have a happiness score in the other dataset
+
+### CREATING A MERGED DATASET 
+
+# Merge two datasets
+countries_with_happy <- merge(happy, AllCountries, by.x = "Country_or_region", by.y = "Country") 
+
+# Call column '2018' 'Happiness_score'
+colnames(countries_with_happy)[colnames(countries_with_happy) == "Score"] <- "Happiness_score" 
+
+summary(countries_with_happy)
+glimpse(countries_with_happy)
+n_distinct(countries_with_happy$Country_or_region) # 137 countries in final dataset
+
+# Selecting a subset of the data
+countries_with_happy <- countries_with_happy[, c("Happiness_score", "Country_or_region", "GDP", "Military", "Health", "Internet", "Unemployment")]
+```
+
+Last week, I created graphs and tables summarizing my data.
+
+# Graphs and Tables Summarizing Data
+
+```{r}
+# Histogram of happiness scores 
+ggplot(data=countries_with_happy, aes(x=Happiness_score)) + 
+  geom_histogram(fill="purple", color="white") + 
+  ggtitle("Distribution of Happiness Scores") +
+  xlab("Happiness Score (0-10)") + 
+  ylab("Frequency")
+```
+
+The histogram shows us the distribution of happiness scores. More than 12 countries have a score of around 4.4, and many countries have scores between 5 and 6.5. A couple of countries have scores close to 3, while a few have scores of 8 or above. (Note: Happiness score is the national average response to the question of life evaluations asking "Please imagine a ladder, with steps numbered from 0 at the bottom to 10 at the top. The top of the ladder represents the best possible life for you and the bottom of the ladder represents the worst possible life for you. On which step of the ladder would you say you personally feel you stand at this time?" This measure is also referred to as Cantril life ladder.)
+
+```{r}
+# Scatterplot of happiness score VS GDP per capita
+ggplot(data=countries_with_happy, aes(x=GDP, y=Happiness_score)) + 
+  geom_point() +
+# geom_text(aes(label = Country_or_region), hjust = 0.5, vjust = -0.5) + # in case I ever want to see the country each pt represents. Costa Rica has low GDP but high happiness!
+  ggtitle("GDP VS Happiness Score") + 
+  ylab("Happiness Score (0-10)") + 
+  xlab("GDP per capita") 
+```
+
+Overall, there is an upward trend, indicating that countries or regions with higher GDP tend to, on average, have higher happiness scores, and there seems to be some curvature here. There is a good amount of variability in happiness scores for countries with very low GDPs. For countries with GDPs close to 0 (i.e. in the low hundreds of US$), happiness scores range from below 3 to above 6. Note also that 4 countries with GDPs of above \$60,000 have happiness scores below 7.
+
+For the data points that have GDP per capita very close to 0, this implies either an extremely low or non-exist GDP (total economic output) or a very large population relative to the economic output. Burundi has a GDP per capita of $275.
+
+It seems like a log transform on GDP might be a good thing to include in my model.
+
+```{r}
+library(corrplot)
+
+# Correlation plot for numerical variables in the dataset:
+Corr <- cor(select_if(countries_with_happy, is.numeric), use="complete.obs")
+corrplot(Corr)
+```
+
+Happiness score seems to have a fairly high positive correlation with GDP which is consistent with what I found in my scatterplot above. Happiness score also has fairly high positive correlations with percentage of government expenditures directed towards healthcare and percentage of the population with access to the internet. Happiness score has a weak negative correlation with unemployment, but it also has a weak negative correlation with percentage of government expenditures directed toward the military, which is interesting and might be something worth looking into.
+
+```{r}
+# Sorting the Data by GDP and Selecting the 10 Lowest GDPs
+lowest_gdp_data <- countries_with_happy[order(countries_with_happy$GDP), ][1:10,]
+
+# Creating a Horizontal Bar Chart of Happiness Scores for the 10 Countries with the Lowest GDPs
+ggplot(lowest_gdp_data, aes(x = Happiness_score, y = reorder(Country_or_region, GDP), fill = GDP)) +
+  scale_fill_gradient(low = "lightblue", high = "dodgerblue") + 
+  geom_bar(stat = "identity") +
+  labs(title = "Happiness Scores for the 10 Countries/Regions with the Lowest GDPs", x = "Happiness Score (0-10)", y = "Country or Region") +
+  xlim(0,10) + # setting scale for x axis
+  theme_minimal() +
+  theme(axis.text = element_text(size = 10)) +
+  geom_label(mapping = aes(label = Happiness_score))
+```
+
+```{r}
+# Sorting the Data by GDP and Selecting the 10 Highest GDPs
+highest_gdp_data <- countries_with_happy[order(countries_with_happy$GDP, decreasing = TRUE), ][1:10,]
+
+# Creating a Horizontal Bar Chart of Happiness Scores for the 10 Countries with the Lowest GDPs
+ggplot(highest_gdp_data, aes(x = Happiness_score, y = reorder(Country_or_region, GDP), fill = GDP)) +
+  scale_fill_gradient(low = "lightblue", high = "dodgerblue") + 
+  geom_bar(stat = "identity") +
+  labs(title = "Happiness Scores for the 10 Countries/Regions with the Highest GDPs", x = "Happiness Score (0-10)", y = "Country or Region") +
+  xlim(0,10) + # setting scale for x axis
+  theme_minimal() +
+  theme(axis.text = element_text(size = 10)) +
+  geom_label(mapping = aes(label = Happiness_score))
+```
+
+For the countries or regions with the 10 lowest GDPs in our dataset, happiness scores range from 2.905 to 4.982. Burundi, which has the lowest GDP of all countries and regions in our dataset, has the lowest happiness score of these 10 places. For the countries or regions with the 10 highest GDPs in our dataset, happiness scores range from 6.343 to 7.594. It is interesting that the country with the highest GDP has a lower happiness score than 6 of the countries or regions here.
+
+```{r}
+# Scatterplot of happiness score VS military
+ggplot(data=countries_with_happy, aes(x=Military, y=Happiness_score)) + 
+  geom_point() +
+  ggtitle("% Gov Expenditures Directed Toward Military VS Happiness Score") + 
+  ylab("Happiness Score (0-10)") + 
+  xlab("% Gov Expenditures Directed Toward Military") +
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+There seems to be a weak, negative linear relationship between percentage of government expenditures directed toward the military and happiness score, which is interesting. With that being said, there is a lot of variability in happiness scores among countries with lower percentages of government expenditures directed toward the military (i.e. less than 10%), with some countries having scores below 3.5 and others having scores above 7.5.
+
+```{r}
+# Scatterplot of happiness score VS unemployment
+ggplot(data=countries_with_happy, aes(x=Unemployment, y=Happiness_score)) + 
+  geom_point() +
+  ggtitle("Unemployment VS Happiness Score") + 
+  ylab("Happiness Score (0-10)") + 
+  xlab("% Labor Force Unemployed") +
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+There also seems to be a weak, negative linear relationship between percent of the labor force unemployed and happiness score. It is interesting that there is more variability in happiness scores among countries with a smaller percentage of the labor force unemployed.
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# Weeks 2-4 Work:
+
+```{r, fig.height = 6}
+ggplot(data=countries_with_happy, aes(x = GDP, y = Happiness_score)) + 
+  geom_point() +
+  theme(title = element_text(size = 15),
+        axis.text.x = element_text(size = 15),
+        axis.text.y = element_text(size = 15),
+        axis.title.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15)) + 
+  stat_smooth(method = "lm", se = FALSE) + 
+  ggtitle("Happiness Score VS GDP") + 
+  xlab("GDP ($US)") + ylab("Happiness Score (0-10)") 
+
+ggplot(data=countries_with_happy, aes(x = Internet, y = Happiness_score)) + geom_point() + 
+  theme(title = element_text(size = 15),
+        axis.text.x = element_text(size = 15),
+        axis.text.y = element_text(size = 15),
+        axis.title.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15)) + 
+  stat_smooth(method="lm", se=FALSE) + 
+  ggtitle("Happiness Score VS % Population with Access to Internet") + 
+  xlab("% Population with Access to Internet") + ylab("Happiness Score (0-10)") 
+```
+
+From the first graph, it looks like we might want to include a log transform on GDP to address the right-skewness! It seems like there are just a few countries with really big GDPs.
+
+Fitting a simple linear regression model with log(GDP) as the only explanatory variable to the data, we obtain the following:
+
+```{r}
+Happy_M1 <- lm(data=countries_with_happy, Happiness_score~log(GDP))
+summary(Happy_M1)
+```
+
+72.57% of the total variation in happiness score is explained by log(GDP). 
+
+```{r}
+Corr
+```
+
+GDP and Internet have a correlation of around 0.713, so we should check to see if SE on log(GDP) increases significantly after adding Internet to our model. 
+
+```{r, fig.height = 6}
+Happy_GDPInternet <- lm(data=countries_with_happy, Happiness_score~log(GDP)+Internet)
+summary(Happy_GDPInternet)
+
+# Scatterplot of happiness score VS GDP per capita  
+ggplot(data=countries_with_happy, aes(x = GDP, y = Happiness_score)) + 
+  geom_point() +
+  theme(title = element_text(size = 15),
+        axis.text.x = element_text(size = 15),
+        axis.text.y = element_text(size = 15),
+        axis.title.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15)) + 
+  ggtitle("GDP VS Happiness Score") + 
+  ylab("Happiness Score (0-10)") + 
+  xlab("GDP per capita (US$)") 
+
+# Scatterplot of happiness score VS log(GDP per capita)
+ggplot(data=countries_with_happy, aes(x = log(GDP), y = Happiness_score)) + 
+  geom_point() +
+  theme(title = element_text(size = 15),
+        axis.text.x = element_text(size = 15),
+        axis.text.y = element_text(size = 15),
+        axis.title.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15)) + 
+  ggtitle("log(GDP) VS Happiness Score") + 
+  ylab("Happiness Score (0-10)") + 
+  xlab("log(GDP per capita) (US$)") 
+```
+
+The SE on log(GDP) increased from <2e-16 to 3.88e-09, which is not that much. Thus, it should be fine to include both log(GDP) and Internet in the model. 73.03% of the total variation in happiness score is explained by log(GDP) and Internet.
+
+Let us investigate whether there is an interaction between log(GDP) and Internet via scatterplot:
+
+```{r}
+# Scatterplot of happiness score VS log(GDP) per capita with color = Internet
+ggplot(data=countries_with_happy, aes(x=log(GDP), y=Happiness_score, color = Internet)) + 
+  geom_point() +
+  ggtitle("log(GDP) VS Happiness Score") + 
+  ylab("Happiness Score (0-10)") + 
+  xlab("log(GDP per capita)") 
+```
+
+I also created a categorical variable for Internet to further investigate the possibility of an interaction between log(GDP) and Internet:
+
+```{r}
+# Creating a categorical variable for Internet:
+countries_with_happy$Internet_Categorical <- cut(countries_with_happy$Internet, breaks = c(0, 50, 100), labels = c("0-50", "50-100"))
+
+# New ggplot
+ggplot(data = countries_with_happy, aes(x = log(GDP), y = Happiness_score, color = Internet_Categorical)) + 
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, aes(group = Internet_Categorical)) +
+  ggtitle("log(GDP) VS Happiness Score") + 
+  ylab("Happiness Score (0-10)") + 
+  xlab("log(GDP per capita)")
+```
+
+When I take the log of GDP, we get a really nice positive linear trend. There doesn't seem to be as much of a need for an interaction. I can look at a model with the interaction term and see what the p-value is. This is a case where looking at p-values might actually prove to be helpful. 
+
+```{r}
+# checking p-value on interaction term between log(GDP) and Internet
+Happy_GDPInternet <- lm(data=countries_with_happy, Happiness_score~log(GDP)*Internet)
+summary(Happy_GDPInternet)
+```
+
+The p-value on the interaction term between log(GDP) and Internet is quite large, so I will proceed without interaction. Let us try adding Health to the model.
+
+```{r}
+Happy_M3 <- lm(data=countries_with_happy, Happiness_score~log(GDP)+Internet+Health)
+summary(Happy_M3)
+```
+
+76.37% of the total variation in happiness score is explained by log(GDP), Internet, and Health. Let's try adding Military and Unemployment into our model as well:
+
+```{r}
+Happy_M4 <- lm(data=countries_with_happy, Happiness_score~log(GDP)+Internet+Health+Military+Unemployment)
+summary(Happy_M4)
+```
+
+R^2 increased from 0.7637 to 0.8252.
+
+Now let's check our model assumptions:
+
+```{r, fig.width = 15}
+P1 <- ggplot(data=data.frame(Happy_M4$residuals), aes(y=Happy_M4$residuals, x=Happy_M4$fitted.values)) + geom_point() + ggtitle("Residual Plot") + xlab("Predicted Values") + ylab("Residuals")
+P2 <- ggplot(data=data.frame(Happy_M4$residuals), aes(x=Happy_M4$residuals)) + geom_histogram() + ggtitle("Histogram of Residuals") + xlab("Residual")
+P3 <- ggplot(data=data.frame(Happy_M4$residuals), aes(sample = scale(Happy_M4$residuals))) + stat_qq() + stat_qq_line() + xlab("Normal Quantiles") + ylab("Residual Quantiles") + ggtitle("QQ Plot")
+grid.arrange(P1, P2, P3, ncol=3)
+```
+
+We do not see any curvature or funnel shapes in the residual plot, so the linearity and constant variance assumptions seem valid. There is a slight left-skewness in our histogram of residuals and QQ plot, but it doesn’t appear too significant. This may raise some concern about the normality assumption, although, again, I don't think we need to worry too much about it. Usually, log transformations are useful for reducing numbers and addressing right skewness, but in our case, we want the opposite effect. I did a bit of research on addressing left-skewness, and it looks like some methods to try are (once again) log transformations, square root transformations, and removing outliers. However, given the non-severity of the skewness for now, I will maintain our model as it is.
+
+With regards to the independence assumption, we must think about whether there were factors in the data collection that would cause some observations to be more highly correlated than others. There's a possibility that countries or regions in the same region or continent are more highly correlated. I might need to think about a model that can account for spatial correlation. I can try adding in a random effect for region, or perhaps learning more about spatial models and doing something with them.
+
+In models with multiple explanatory variables, it is helpful to also plot our residuals against the explanatory variables to see whether the model is properly accounting for relationships involving each variable. If we see nonlinear trends, we should consider adding a nonlinear function of that explanatory variable.
+
+```{r, fig.width = 20}
+P4 <- ggplot(data=data.frame(Happy_M4$residuals), aes(y=Happy_M4$residuals, x=Happy_M4$model$`log(GDP)`)) + geom_point() + ggtitle("Residual by Predictor Plot") + xlab("log(GDP per capita)") + ylab("Residuals")
+P5 <- ggplot(data=data.frame(Happy_M4$residuals), aes(y=Happy_M4$residuals, x=Happy_M4$model$Internet)) + geom_point() + ggtitle("Residual by Predictor Plot") + xlab("% Pop With Access to Internet") + ylab("Residuals")
+P6 <- ggplot(data=data.frame(Happy_M4$residuals), aes(y=Happy_M4$residuals, x=Happy_M4$model$Health)) + geom_point() + ggtitle("Residual by Predictor Plot") + xlab("% Gov Exp Dir Towards Healthcare") + ylab("Residuals")
+P7 <- ggplot(data=data.frame(Happy_M4$residuals), aes(y=Happy_M4$residuals, x=Happy_M4$model$Military)) + geom_point() + ggtitle("Residual by Predictor Plot") + xlab("% Gov Exp Dir Towards Military") + ylab("Residuals")
+P8 <- ggplot(data=data.frame(Happy_M4$residuals), aes(y=Happy_M4$residuals, x=Happy_M4$model$Unemployment)) + geom_point() + ggtitle("Residual by Predictor Plot") + xlab("% Labor Force Unemployed") + ylab("Residuals")
+grid.arrange(P4, P5, P6, P7, P8, ncol=3)
+```
+
+There is some concern about the constant variance assumption in the plots of residuals against 'Military' and 'Unemployed.' However, there really are just a few points to the right that might add to this effect; it is nothing too serious. It is worth noting that this violation of the constant variance assumption could potentially lead to wider intervals, but the predictions should still be reliable. The linearity assumption looks good here; there is not really any curvature in our residual plots. 
+
+Generally, if these looked worse it might be OK to try a log transformation on these explanatory variables. Log transformations are usually for violations of normality, but sometimes it can help with linearity and constant variance too. We also talked about dispersion parameters at the end of STAT 455, which can address violations of constant variance by accounting for overdispersion. There are also functions on the explanatory variables we could use to help with this, but this might be too complicated given that the issue is not too serious here / these really do not look bad.
+
+To account for spatial correlation, I will first try to add a random effect for region. In order to do this, I first need to add a 'Region' column to my data frame.
+```{r}
+# adding a 'Region' column
+regions <- read_csv("countriesregions.csv") # from: https://www.kaggle.com/datasets/fernandol/countries-of-the-world
+
+countries_with_happy <- left_join(countries_with_happy, regions, by = c("Country_or_region" = "Country"))
+countries_with_happy <-  countries_with_happy[, c("Happiness_score", "Country_or_region", "GDP", "Military", "Health", "Internet", "Unemployment", "Region")]
+
+# filter countries with missing values for 'Region' column
+countries_with_missing_region <- countries_with_happy %>% filter(is.na(Region))
+
+# print countries with missing values for 'Region'
+print(countries_with_missing_region)
+
+# check to see how many missing values there are in each col
+colSums(is.na(countries_with_happy)) # no missing values for country_or_region; 6 countries where the info about region is missing.
+
+# eliminate missing values in 'Region' col by sorting places with NA for 'Region' into one of the 11 regions
+countries_with_happy <- countries_with_happy %>%
+  mutate(Region = ifelse(Country_or_region %in% c('Bosnia and Herzegovina', 'Kosovo', 'Montenegro'), 'WESTERN EUROPE', ifelse(Country_or_region %in% c('Central African Republic', 'South Sudan'), 'SUB-SAHARAN AFRICA', ifelse(Country_or_region == 'Myanmar', 'ASIA (EX. NEAR EAST)', Region))))
+```
+
+Now let's add the random effect for 'Region':
+```{r}
+Happy_M5 <- lmer(Happiness_score ~ log(GDP) + Internet + Health + Military + Unemployment + (1 | Region), data = countries_with_happy)
+summary(Happy_M5)
+```
+
+There is more variability in happiness scores between countries in the same region than between regions, after accounting for GDP, Internet, Health, Military, and Unemployment. Despite this, based off the question I am investigating and the nature of the data (with a potential violation of the independence assumption), it makes more sense to include a random effect for region.
+
+Happy_M5 will be my final linear mixed-effects regression model. We can interpret the fixed effects output as follows: $\alpha_0$ = 1.58 and is the mean happiness score of a country with \$0 log-transformed GDP per capita (or $1 GDP per capita), 0% of the population with access to the internet, 0% of government expenditures directed towards healthcare, 0% of government expenditures directed toward the military, and 0% of the labor force unemployed. This is not a meaningful interpretation, however, since there is no country in our sample where all of this holds. 
+
+$\beta_1$ = 0.365. For every $1 increase in the log-transformed GDP per capita, the estimated change in happiness score is 0.365. This suggests that higher log(GDP) is associated with higher happiness scores. (Think: log(x) + 1) 
+
+$\beta_2$ = 0.0124. For every 1 percentage point increase in percentage of the population with access to the internet, happiness score is estimated to increase by 0.0124 after controlling for GDP per capita, percentage of government expenditures directed towards healthcare, percentage of government expenditures directed towards the military, and percent of labor force unemployed. This implies that countries with higher levels of Internet usage tend to have slightly higher happiness scores.
+
+$\beta_3$ = 0.0211. For every 1 percentage point increase in percentage of government expenditures directed towards healthcare, happiness score is estimated to increase by 0.0211 after controlling for GDP per capita, percentage of the population with access to internet, percentage of government expenditures directed towards the military, and percent of labor force unemployed. 
+
+$\beta_4$ = -0.002. For every 1 percentage point increase in percentage of government expenditures directed toward the military, happiness score is estimated to decrease by 0.002 after controlling for GDP per capita, percentage of the population with access to the internet, percentage of government expenditures directed towards healthcare, and percent of labor force unemployed. The coefficient is quite close to 0. 
+
+$\beta_5$ = -0.0422. For every 1 percentage point increase in percent of labor force unemployed, happiness score is estimated to decrease by 0.0422 after controlling for GDP per capita, percentage of the population with access to the internet, percentage of government expenditures directed towards healthcare, and percentage of government expenditures directed towards the military.
+
+Moving on to the random effects, as I mentioned previously, there is more variability in happiness scores between countries in the same region ($\sigma$ = 0.445) than between regions ($\sigma_r$ = 0.266) , after accounting for all of the fixed effects above. 
+
+The final model equation is as follows: 
+Happiness_score_ij = $\alpha_0$ + $\beta_1$ * log(GDP)_ij + $\beta_2$ * Internet_ij + $\beta_3$ * Health_ij + $\beta_4$ * Military_ij + $\beta_5$ * Unemployment_ij + $r_i$ + $\epsilon_{ij}$
+
+BUT WAIT!! Checking if any random slopes will be necessary:
+```{r}
+# Do we need a random slope for GDP?
+
+# Plot the relationship between GDP and happiness score for each region
+ggplot(countries_with_happy, aes(x = log(GDP), y = Happiness_score)) +
+  geom_point() +
+  facet_wrap(~ Region, scales = "free") +
+  geom_smooth(method = "lm", se = FALSE) +  # Add a linear regression line
+  labs(x = "Log(GDP)", y = "Happiness Score") +
+  theme_minimal()
+```
+
+Note that there are only 2 observations within the Oceania region, 2 within the Northern America region, 3 within the Baltics region, and 4 within Northern Africa. Thus, creating separate scatterplots for each region may not provide reliable insights into the relationship between the predictor variable and the outcome variable within those regions. With such a small number of observations, the estimated slopes of the regression lines may be highly variable and not representative of the true relationship.
+
+In this case, it might be better to explore the need for random slopes using statistical tests or by examining the variation in the estimated slopes across different regions. One approach could be to fit a mixed-effects model with random slopes for the predictor variable and compare it to a model without random slopes using likelihood ratio tests or information criteria (e.g., AIC or BIC). If including random slopes significantly improves the model fit or reduces the information criteria, it suggests that the slopes of the predictor variable vary between regions and that random slopes may be necessary.
+
+```{r}
+# Fit the initial model without random slopes
+Happy_M5_initial <- lmer(Happiness_score ~ log(GDP) + Internet + Health + Military + Unemployment + (1 | Region), data = countries_with_happy)
+
+# Fit the model with random slopes
+Happy_M5_random_slopes <- lmer(Happiness_score ~ log(GDP) + Internet + Health + Military + Unemployment + (1 + log(GDP) + Internet + Health + Military + Unemployment | Region), data = countries_with_happy)
+
+# Perform likelihood ratio test
+lrtest <- anova(Happy_M5_initial, Happy_M5_random_slopes)
+
+# View the likelihood ratio test results
+print(lrtest)
+```
+
+The large p-value (0.99) means that we do not have evidence against the null hypothesis that the model without random slopes is sufficient, suggesting that the addition of random slopes does not provide a statistically significant improvement in model fit compared to the model with only a random intercept. Thus, I will proceed without any random slopes.
+
+### RANDOM FORESTS + VARIABLE IMPORTANCE MEASURES
+
+```{r}
+library(randomForest)
+library(dplyr)  # Make sure you have the dplyr package loaded
+
+# Data investigation and preparation
+str(countries_with_happy) # check types of variables
+summary(countries_with_happy) # investigate data
+dim(countries_with_happy) # check number of rows and columns - 137 rows, 9 columns
+
+# Convert nominal categorical predictors from character to factor (Country_or_region, Region)
+countries_with_happy$Country_or_region <- as.factor(countries_with_happy$Country_or_region)
+countries_with_happy$Region <- as.factor(countries_with_happy$Region)
+
+# Eliminate 'Country_or_region' variable (factor with 137 levels) - I previously got an error: 
+countries_with_happy <- dplyr::select(countries_with_happy, -Country_or_region)
+
+# Impute missing values using rfImpute
+countries_with_happy_imputed <- rfImpute(Happiness_score ~., countries_with_happy, ntree = 500) # not letting me; I have two many factor levels in countries
+
+# Run the random forest model
+set.seed(01242024)
+rf <- randomForest(Happiness_score ~., data = countries_with_happy_imputed, ntree = 500)
+print(rf)
+
+# Find the optimal mtry value
+# want to select the mtry value with the minimum out of bag (OOB) error
+
+mtry <- tuneRF(countries_with_happy_imputed[-1], countries_with_happy_imputed$Happiness_score, ntreeTry = 500,stepFactor=1.5,improve=0.01, trace=TRUE, plot=TRUE)
+best.m <- mtry[mtry[, 2] == min(mtry[, 2]), 1] 
+print(mtry)
+print(best.m)  
+
+# Build model again using best mtry value
+set.seed(01242024)
+rf <- randomForest(Happiness_score ~ ., data = countries_with_happy_imputed, mtry = best.m, importance = TRUE, ntree = 500)
+print(rf) 
+
+# Evaluate variable importance
+importance(rf)
+varImpPlot(rf)
+```
+
+From R Documentation: "The first [variable importance] measure is computed from permuting OOB data: For each tree, the prediction error on the out-of-bag portion of the data is recorded (error rate for classification, MSE for regression). Then the same is done after permuting each predictor variable. The difference between the two are then averaged over all trees, and normalized by the standard deviation of the differences. If the standard deviation of the differences is equal to 0 for a variable, the division is not done (but the average is almost always equal to 0 in that case).
+
+The second measure is the total decrease in node impurities from splitting on the variable, averaged over all trees. For classification, the node impurity is measured by the Gini index. For regression, it is measured by residual sum of squares." (Prof. Sage and I are not really sure why they even include this here when this is a regression problem.)
+
+PERMUTATION IMPORTANCE:
+```{r}
+# Using DALEX package to implement permutation importance in R
+
+library(DALEX)
+library(randomForest)
+
+set.seed(123)
+PI_model <- randomForest(Happiness_score ~ ., data = countries_with_happy_imputed)
+
+# Create an explainer object
+explainer <- explain(PI_model, data = countries_with_happy_imputed[,-which(names(countries_with_happy_imputed) == "Happiness_score")], y = countries_with_happy_imputed$Happiness_score)
+
+# Calculate Permutation Importance
+perm_importance <- feature_importance(explainer, loss_function = DALEX::loss_root_mean_square, type = "variable_importance")
+
+# Print the results
+print(perm_importance)
+
+# Plot the permutation importance
+plot(perm_importance)
+```
+
+Is this the same as the previous graph on the left (%IncMSE)?
+
+PERMUTATION IMPORTANCE:
+```{r}
+set.seed(01302024)
+
+# c <- matrix(nrow = 30, ncol = 0) # create an empty matrix
+# 
+# # create for loop to run 30 times
+# for(i in 1:30) {
+#   countries_pi <- randomForest(Happiness_score ~ ., data = countries_with_happy_imputed, ntree = 1000, importance = TRUE)
+#   imp <- countries_pi$importance[,1] # store PI scores in imp
+#   imp <- ifelse(imp < 0, 0, imp) # if PI score is negative, convert it to 0, else keep it the same
+#   perc <- imp/sum(imp) * 100 # store PI scores as percentages in perc
+#   c <- matrix(cbind(c, perc), byrow = FALSE, nrow = 6, ncol = i)
+# }
+# c
+# 
+# avg_countries_pi <- data.frame(rowMeans(c), row.names = names(perc)[]) # create df with AVERAGE PI scores as percentages
+# colnames(avg_countries_pi) <- "Avg_PI_Score_As_Perc" # renaming column
+# avg_countries_pi <- avg_countries_pi %>% arrange(desc(avg_countries_pi)) %>% round(digits = 2) 
+# avg_countries_pi 
+
+# save(avg_countries_pi, file = "pi_countries.Rdata")
+load("pi_countries.Rdata") # USE TO LOAD IN TABLE QUICKLY IN THE FUTURE
+avg_countries_pi
+```
+GDP > Internet > Region > Health > Unemployment > Military 
+
+CONDITIONAL IMPORTANCE:
+```{r}
+library(party)
+set.seed(01302024)
+
+# d <- matrix(nrow = 30, ncol = 0) # create an empty matrix
+# 
+# # create for loop to run 10 times
+# for(i in 1:30) {
+#   countries_ci <- cforest(data = countries_with_happy_imputed, Happiness_score ~., control = cforest_unbiased(mtry = best.m, ntree = 1000))
+#   cond_imp <- varimp(countries_ci, conditional = TRUE) # store conditional variable importance scores in cond_imp
+#   cond_imp <- ifelse(cond_imp < 0, 0, cond_imp) # if CI score is negative, convert it to 0, else keep it the same
+#   cond_imp_as_perc <- cond_imp/sum(cond_imp) * 100 
+#   d <- matrix(cbind(d, cond_imp_as_perc), byrow = FALSE, nrow = 6, ncol = i)
+# }
+# d
+# 
+# avg_countries_ci <- data.frame(rowMeans(d), row.names = names(cond_imp_as_perc)[]) # create df with AVERAGE cond imp scores as %s
+# colnames(avg_countries_ci) <- "Avg_Cond_VarImp_Score_As_Perc" # renaming column
+# avg_countries_ci <- avg_countries_ci %>% arrange(desc(avg_countries_ci)) %>% round(digits = 2)
+# avg_countries_ci 
+
+# save(avg_countries_ci, file = "ci_countries.Rdata")
+load("ci_countries.Rdata") # USE TO LOAD IN TABLE QUICKLY IN THE FUTURE
+avg_countries_ci
+```
+
+GDP > Internet > Region > Health > Unemployment > Military 
+
+LIME (Local Interpretable Model-Agnostic Explanations):
+
+Trying to get a LIME ranking by using LIME to explain all 137 cases in our dataset, grouping by feature, summing the magnitudes of the feature weights, and converting them to percentages:
+```{r, fig.width = 10}
+set.seed(01302024)
+
+library(dplyr)  # Make sure you have the dplyr package loaded
+
+# Divide dataset into train and test
+smp_size <- floor(0.75 * nrow(countries_with_happy_imputed))
+train_index <- sample(seq_len(nrow(countries_with_happy_imputed)), size = smp_size)
+
+train_countries <- countries_with_happy_imputed[train_index, ]
+test_countries <- countries_with_happy_imputed[-train_index, ]
+
+cat(dim(train_countries), dim(test_countries)) # check dimensions, 102 rows in train set and 35 in test set
+
+# Use rf model (10-fold CV repeated 5 times and a basic RF model)
+cv_specs <- trainControl(method = "repeatedcv", number = 10, repeats = 5, verboseIter = FALSE) # CV specifications
+
+model_rf_countries <- train(x = dplyr::select(train_countries, -Happiness_score), 
+                            y = train_countries$Happiness_score, 
+                            method = "rf", 
+                            trControl = cv_specs,
+                            metric = "RMSE")
+
+model_rf_countries # optimal mtry = 8
+
+# Apply the predict function of this model on test set and get RMSE
+countries_rf_preds <- predict(model_rf_countries, newdata = dplyr::select(test_countries, -Happiness_score))
+# mean(test_countries$Happiness_score == countries_rf_preds) ## ??????
+
+# Now we have our model! Use LIME to create an explainer object.
+explainer <- lime(dplyr::select(train_countries, -Happiness_score), model_rf_countries) # model_rf is the model whose output should be explained
+
+# Explain predictions on a subset of the test set
+explanation <- test_countries %>% 
+  dplyr::select(-Happiness_score) %>%  # Remove the Happiness_score column
+ # slice(1:10) %>%
+  lime::explain(explainer = explainer, 
+                n_labels = 1, 
+                n_features = 6, 
+                n_permutations = 5000, 
+                kernel_width = 0.5)  
+
+# Grouping by feature, taking the sum of the abs value of feature weights, and arranging in a df sorted in order of descending feature weight: 
+total_feature_weights_countries <- explanation %>% 
+  group_by(feature) %>% 
+  summarize(total_feature_weight = sum(abs(feature_weight)),
+            total_feature_weight_as_perc = (total_feature_weight/(sum(abs(explanation$feature_weight)))* 100)) %>%
+  arrange(desc(total_feature_weight)) 
+
+# Round the dataframe
+round_df <- function(x, digits) {
+  numeric_columns <- sapply(x, class) == 'numeric'
+  x[numeric_columns] <-  round(x[numeric_columns], digits)
+  x
+}
+
+total_feature_weights_countries <- round_df(total_feature_weights_countries, 2)
+
+# Save the results
+save(total_feature_weights_countries, file = "lime_countries.Rdata")
+
+# Load the results
+load("lime_countries.Rdata")
+
+# Create a new dataframe with only 'feature' and 'total_feature_weight_as_perc' columns
+total_feature_weights_as_perc_countries <- total_feature_weights_countries[, c("feature", "total_feature_weight_as_perc")]
+
+# This dataframe contains feature names and their corresponding weights as percentages
+total_feature_weights_as_perc_countries
+kable(as.data.frame(total_feature_weights_as_perc_countries), col.names = c("Feature", "Total Feature Weight (%)"), caption="LIME Variable Importance Ranking")
+```
+
+Interestingly, this is the same exact ranking we get for PI and CI (with different %s). 
+
+```{r}
+library(lime)
+
+set.seed(01302024)
+
+# Divide dataset into train and test
+smp_size <- floor(0.75 * nrow(countries_with_happy_imputed)) 
+train_index <- sample(seq_len(nrow(countries_with_happy_imputed)), size = smp_size)
+
+train_countries <- countries_with_happy_imputed[train_index, ]
+test_countries <- countries_with_happy_imputed[-train_index, ]
+
+# Remove the response variable from the training and test datasets
+response_train <- train_countries$Happiness_score
+response_test <- test_countries$Happiness_score
+train_countries <- subset(train_countries, select = -Happiness_score)
+test_countries <- subset(test_countries, select = -Happiness_score)
+
+# Train the random forest model
+cv_specs <- trainControl(method = "repeatedcv", number = 10, repeats = 5, verboseIter = FALSE)
+model_rf_countries <- train(x = train_countries, 
+                            y = response_train, 
+                            method = "rf", 
+                            trControl = cv_specs,
+                            metric = "RMSE")
+
+# Apply the model to make predictions on the test set
+countries_rf_preds <- predict(model_rf_countries, newdata = test_countries)
+
+# Use LIME to create an explainer object
+explainer <- lime(train_countries, model_rf_countries)
+
+# Explain predictions on a subset of the test set
+explanation <- test_countries %>%
+  slice(1:4) %>%
+  lime::explain(explainer = explainer, 
+                n_labels = 1, 
+                n_features = 6, 
+                n_permutations = 5000, 
+                kernel_width = 0.5)
+
+# Visualize the explanation
+lime_plot <- plot_features(explanation, ncol = 2)
+
+# Using ggplot2 to save a .png of my plot (so I can upload it to the RMarkdown file with my report)
+ggsave("lime_plot.png", plot = lime_plot, width = 10, height = 6, units = "in", dpi = 300)
+
+# Open a device to save the plot
+png("plot.png", width = 800, height = 600, res = 300)
+# Plot graph
+plot(lime_plot)
+# Close device
+dev.off()
+
+
+# Group by feature and calculate the total feature weight
+total_feature_weights_countries <- explanation %>% 
+  group_by(feature) %>% 
+  summarize(total_feature_weight = sum(abs(feature_weight)),
+            total_feature_weight_as_perc = (total_feature_weight/(sum(abs(explanation$feature_weight)))* 100)) %>%
+  arrange(desc(total_feature_weight))
+
+# Round the dataframe
+round_df <- function(x, digits) {
+  numeric_columns <- sapply(x, class) == 'numeric'
+  x[numeric_columns] <-  round(x[numeric_columns], digits)
+  x
+}
+
+total_feature_weights_countries <- round_df(total_feature_weights_countries, 2)
+
+# Save the results
+save(total_feature_weights_countries, file = "lime_countries.Rdata")
+
+# Load the results
+load("lime_countries.Rdata")
+
+# Create a new dataframe with only 'feature' and 'total_feature_weight_as_perc' columns
+total_feature_weights_as_perc_countries <- total_feature_weights_countries[, c("feature", "total_feature_weight_as_perc")]
+
+# This dataframe contains feature names and their corresponding weights as percentages
+total_feature_weights_as_perc_countries
+```
+
+SHAPLEY (ignore this section, tried to perform a simulation to investigate why unemployment ranks low in rf but high in t-val, but didn't really get to finish up with this): The variable importance, from least to most important, should be: x4, x3, x2, x1/x5. We are testing to see whether random forest variable importance measures overemphasize the importance of correlated features. x5 represents unemployment, and x2 represents GDP. Does random forest variable importance put x2/x3/x4 higher than x5 because it is highly correlated with x1?
+
+```{r}
+# library(MASS)
+# library(randomForest)
+# 
+# set.seed(02222024)
+# 
+# Size <- 1000 # sample size (number of rows in dataset)
+# 
+# Sigma <- diag(x=1, nrow=5, ncol=5)  # generate variance-covariance matrix for X's with 1's on diagonals
+# Sigma
+# # Each predictor variable has standard deviation 1, and they are independent
+# 
+# # Allow for non-zero correlations
+# Sigma[1,2] <- Sigma[2,1] <- 0.9
+# Sigma[2,3] <- Sigma[3,2] <- 0.9
+# Sigma[2,4] <- Sigma[4,2] <- 0.9
+# Sigma[3,4] <- Sigma[4,3] <- 0.9
+# Sigma[1,3] <- Sigma[3,1] <- 0.9
+# Sigma[1,4] <- Sigma [4,1] <- 0.9
+# Sigma
+# 
+# # Generate values of predictor variables
+# X <- mvrnorm(n = Size,  # generate 1000 rows of data
+#              mu = rep(0, 5), # mean of 0 for each variable
+#              Sigma = Sigma) # Cholesky decomposition used
+# 
+# head(X)
+# 
+# sigma <- 1 # st. dev in distribution of y given X's
+# e <- rnorm(Size, 0,sigma) # number of observations = Size = 1000, mean = 0, sd = sigma = 1
+# y= 1.5*X[,1] + 0.3*X[,2] + 0.2*X[,3] + 0.1*X[,4] + 1.5*X[,5] + e
+# 
+# Data = data.frame(cbind(X,y))
+# head(Data)
+# 
+# # RF importance ranking
+# 
+# a <- matrix(nrow = 5, ncol = 0) # create an empty matrix
+# 
+# # Create for loop to run 1000 times
+# for(i in 1:30) {
+#   RF <- randomForest(data=Data, y~., ntree=1000, importance=TRUE)
+#   new = RF$importance[,1]
+#   a <- matrix(cbind(a, new), byrow = FALSE, nrow = 5, ncol = i)
+# }
+# 
+# a
+# 
+# rowMeans(a) # get the average of each row (where row 1 is all the variable importance scores for x1, row 2 is all the variable importance scores for x2, etc)
+# avg_a <- data.frame(rowMeans(a), row.names = c("x1", "x2", "x3", "x4", "x5")) # create dataframe with average variable importance scores
+# colnames(avg_a)[1] <- "Avg_Variable_Importance_Score" # renaming column
+# avg_a # display dataframe with average variable importance scores
+# order(rowMeans(a)) # from least to most: x2, x3, x4, x1, x5
+# 
+# 
+# # Conditional variable importance ranking 
+# library(party)
+# CF <- cforest(data=Data, y~., control = cforest_unbiased(mtry = 2, ntree=1000))
+# VI <- varimp(CF, conditional = TRUE)
+# VI
+# order(VI) # from least to most: x2, x3, x4, x1, x5  
+# 
+# # Use a for loop and rowMeans() to run simulation 30 times with cforest and to get AVERAGE conditional variable importance scores:
+# k <- matrix(nrow = 5, ncol = 0) # create an empty matrix 
+# 
+# for(i in 1:30) { 
+#   CF <- cforest(data=Data, y~., control = cforest_unbiased(mtry = 2, ntree=1000))
+#   VI <- varimp(CF, conditional = TRUE)
+#   new = VI 
+#   k <- matrix(cbind(k, new), byrow = FALSE, nrow = 5, ncol = i)
+# }
+# 
+# k # should be a 5 x 30 matrix 
+# 
+# avg_k <- data.frame(rowMeans(k), row.names = c("x1", "x2", "x3", "x4", "x5")) # dataframe with avg conditional var imp scores
+# colnames(avg_k)[1] <- "Conditional_Var_Imp_Score" # renaming column
+# avg_k
+# order(rowMeans(k)) # from least to most:
+```
